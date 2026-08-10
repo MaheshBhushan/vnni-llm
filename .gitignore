@@ -1,0 +1,16 @@
+# Build output
+build/
+compile_commands.json
+
+# Model weights — download separately, never commit
+models/
+
+# Benchmark artifacts: the GGUF comparison model and the perplexity corpus.
+# The llama.cpp bench logs are small and are kept as evidence for the README.
+bench/*.gguf
+bench/wiki.test.raw
+
+# Python venv used only by tools/*.py
+.venv/
+__pycache__/
+*.pyc
