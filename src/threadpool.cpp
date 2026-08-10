@@ -2,7 +2,8 @@
 
 namespace mk {
 
-ThreadPool::ThreadPool(int n_threads) : n_threads_(n_threads) {
+// A count below 1 would reach parallel_for as a zero or negative divisor.
+ThreadPool::ThreadPool(int n_threads) : n_threads_(n_threads < 1 ? 1 : n_threads) {
     for (int i = 1; i < n_threads_; ++i)
         threads_.emplace_back([this, i] { worker(i); });
 }
