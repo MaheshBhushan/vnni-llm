@@ -2,6 +2,7 @@
 #include "../src/kernels/ops.h"
 #include "../src/kernels/quant.h"
 #include "../src/tensor.h"
+#include "../src/threadpool.h"
 
 #include <vector>
 
@@ -122,6 +123,22 @@ static void test_q4_roundtrip() {
     CHECK(maxerr < 0.5f, "q4 roundtrip maxerr %g", maxerr);
 }
 
+
+static void test_threadpool_partition() {
+    // A thread count below 1 reaches parallel_for as nt, where it used to
+    // divide by zero (-j 0) or spin forever (-j -1). atoi maps a non-numeric
+    // -j argument to 0 too, so this is reachable from a plain typo.
+    for (int n : {0, -4, 1, 3, 8}) {
+        mk::ThreadPool pool(n);
+        CHECK(pool.size() >= 1, "ThreadPool(%d) reports size %d", n, pool.size());
+        std::vector<int> hits(100, 0);
+        pool.parallel_for(100, [&](int b, int e) { for (int i = b; i < e; ++i) ++hits[i]; });
+        int once = 0;
+        for (int h : hits) once += (h == 1);
+        CHECK(once == 100, "ThreadPool(%d): %d/100 rows covered exactly once", n, once);
+    }
+}
+
 int main() {
     std::srand(42);
     test_bf16_conversion();
@@ -131,6 +148,7 @@ int main() {
     test_rope_orthogonality();
     test_quant_matvec();
     test_q4_roundtrip();
+    test_threadpool_partition();
     if (failures) { std::printf("%d FAILURES\n", failures); return 1; }
     std::printf("all kernel tests passed\n");
     return 0;
