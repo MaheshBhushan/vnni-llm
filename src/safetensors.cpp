@@ -60,7 +60,9 @@ void SafetensorsFile::map_shard(const std::string& path) {
     const uint8_t* base = static_cast<const uint8_t*>(addr);
     uint64_t header_len;
     std::memcpy(&header_len, base, 8);
-    if (8 + header_len > file_len)
+    // Compared this way round because header_len is untrusted: `8 + header_len`
+    // overflows for a large value and wraps below file_len, passing the check.
+    if (file_len < 8 || header_len > file_len - 8)
         throw std::runtime_error("corrupt safetensors header in " + path);
 
     json header = json::parse(base + 8, base + 8 + header_len);
