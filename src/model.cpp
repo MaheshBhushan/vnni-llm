@@ -170,6 +170,12 @@ void Model::forward(int token, KVCache& kv, float* logits) {
 
     if (token < 0 || token >= c.vocab_size) throw std::runtime_error("token out of range");
     if (pos >= kv.max_seq()) throw std::runtime_error("kv cache full");
+    // scores_ is sized from the config, but the cache size is chosen by the
+    // caller; without this the attention loop writes past scores_ for any model
+    // whose context is shorter than the cache. Positions beyond the trained
+    // context are outside RoPE's range anyway.
+    if (pos >= c.max_position_embeddings)
+        throw std::runtime_error("position exceeds max_position_embeddings");
 
     bf16_row_to_f32(x_.data(), embed_ + static_cast<int64_t>(token) * c.hidden_size, c.hidden_size);
 
