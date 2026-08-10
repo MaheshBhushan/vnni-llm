@@ -2,7 +2,12 @@
 #include "../src/kernels/ops.h"
 #include "../src/kernels/quant.h"
 #include "../src/tensor.h"
+#include "../src/safetensors.h"
 #include "../src/threadpool.h"
+
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 
 #include <vector>
 
@@ -139,6 +144,38 @@ static void test_threadpool_partition() {
     }
 }
 
+
+// Writes an 8-byte header length followed by `body`, then checks the loader
+// rejects it. A header length near UINT64_MAX used to overflow the bounds
+// check (8 + header_len wraps below file_len) and load as zero tensors.
+static void check_header_rejected(const char* what, uint64_t header_len,
+                                  const std::string& body) {
+    namespace fs = std::filesystem;
+    fs::path dir = fs::temp_directory_path() / "mk_st_test";
+    fs::create_directories(dir);
+    {
+        std::ofstream f(dir / "model.safetensors", std::ios::binary);
+        f.write(reinterpret_cast<const char*>(&header_len), 8);
+        f.write(body.data(), static_cast<std::streamsize>(body.size()));
+    }
+    bool threw = false;
+    try {
+        mk::SafetensorsFile st(dir.string());
+    } catch (const std::exception&) {
+        threw = true;
+    }
+    CHECK(threw, "%s: loader accepted a corrupt header", what);
+    fs::remove_all(dir);
+}
+
+static void test_safetensors_bad_header() {
+    // Body must be valid JSON: with a wrapped length the parse range is
+    // degenerate, and a body that is not parseable would throw for the wrong
+    // reason and mask the missing bounds check.
+    check_header_rejected("header_len = UINT64_MAX", ~uint64_t(0), "{}" + std::string(100, '\0'));
+    check_header_rejected("header_len past EOF", 4096, std::string(102, '\0'));
+}
+
 int main() {
     std::srand(42);
     test_bf16_conversion();
@@ -149,6 +186,7 @@ int main() {
     test_quant_matvec();
     test_q4_roundtrip();
     test_threadpool_partition();
+    test_safetensors_bad_header();
     if (failures) { std::printf("%d FAILURES\n", failures); return 1; }
     std::printf("all kernel tests passed\n");
     return 0;
