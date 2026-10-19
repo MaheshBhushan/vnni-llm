@@ -1,0 +1,177 @@
+{
+  "tokenizer": [
+    {
+      "name": "empty",
+      "text": "",
+      "specials": false,
+      "ids": [],
+      "decoded": ""
+    },
+    {
+      "name": "word and leading-space merges",
+      "text": "hello hello",
+      "specials": false,
+      "ids": [261, 262],
+      "decoded": "hello hello"
+    },
+    {
+      "name": "merge rank beats leftmost pair",
+      "text": "abc",
+      "specials": false,
+      "ids": [97, 256],
+      "decoded": "abc"
+    },
+    {
+      "name": "equal-rank overlap uses leftmost pair",
+      "text": "aaa",
+      "specials": false,
+      "ids": [272, 97],
+      "decoded": "aaa"
+    },
+    {
+      "name": "UTF-8 byte merge",
+      "text": "café",
+      "specials": false,
+      "ids": [99, 97, 102, 263],
+      "decoded": "café"
+    },
+    {
+      "name": "NFC canonical equivalence",
+      "text": "café",
+      "specials": false,
+      "ids": [99, 97, 102, 263],
+      "decoded": "café"
+    },
+    {
+      "name": "emoji byte fallback",
+      "text": "Hi 😀",
+      "specials": false,
+      "ids": [72, 105, 32, 240, 159, 152, 128],
+      "decoded": "Hi 😀"
+    },
+    {
+      "name": "CJK byte fallback",
+      "text": "你好",
+      "specials": false,
+      "ids": [228, 189, 160, 229, 165, 189],
+      "decoded": "你好"
+    },
+    {
+      "name": "digit pretoken boundary blocks merge",
+      "text": "12",
+      "specials": false,
+      "ids": [49, 50],
+      "decoded": "12"
+    },
+    {
+      "name": "contraction boundary blocks merge",
+      "text": "a's",
+      "specials": false,
+      "ids": [97, 264],
+      "decoded": "a's"
+    },
+    {
+      "name": "punctuation includes newline",
+      "text": "!!\n",
+      "specials": false,
+      "ids": [271],
+      "decoded": "!!\n"
+    },
+    {
+      "name": "trailing space boundary blocks merge",
+      "text": " a ",
+      "specials": false,
+      "ids": [32, 97, 32],
+      "decoded": " a "
+    },
+    {
+      "name": "CRLF whitespace",
+      "text": " \r\n a",
+      "specials": false,
+      "ids": [32, 268, 32, 97],
+      "decoded": " \r\n a"
+    },
+    {
+      "name": "newline boundary blocks merge",
+      "text": "\n a",
+      "specials": false,
+      "ids": [10, 32, 97],
+      "decoded": "\n a"
+    },
+    {
+      "name": "special strings remain literal in encode",
+      "text": "<|end|>",
+      "specials": false,
+      "ids": [60, 124, 101, 110, 100, 124, 62],
+      "decoded": "<|end|>"
+    },
+    {
+      "name": "adjacent longest-first specials",
+      "text": "<|end|>extra<|end|>",
+      "specials": true,
+      "ids": [301, 300],
+      "decoded": "<|end|>extra<|end|>"
+    },
+    {
+      "name": "special between ordinary spans",
+      "text": "hello<|end|>hello",
+      "specials": true,
+      "ids": [261, 300, 261],
+      "decoded": "hello<|end|>hello"
+    },
+    {
+      "name": "unregistered partial special",
+      "text": "<|end|",
+      "specials": true,
+      "ids": [60, 124, 101, 110, 100, 124],
+      "decoded": "<|end|"
+    }
+  ],
+  "quantization": [
+    {
+      "name": "zero including signed Q4 scale",
+      "input": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "q4_scale_bits": 32768,
+      "q4_packed": [136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136, 136],
+      "q4_dequant": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "q8_scale_bits": 0,
+      "q8_values": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "q8_sum": 0
+    },
+    {
+      "name": "negative maximum wins tie",
+      "input": [-8, 8, -7, 7, -6, 6, -5, 5, -4, 4, -3, 3, -2, 2, -1, 1, 0, 0.5, -0.5, 1.5, -1.5, 2.5, -2.5, 3.5, -3.5, 4.5, -4.5, 5.5, -5.5, 6.5, -6.5, 7.5],
+      "q4_scale_bits": 15360,
+      "q4_packed": [128, 159, 113, 175, 98, 190, 83, 205, 68, 220, 53, 235, 38, 250, 23, 249],
+      "q4_dequant": [-8, 7, -7, 7, -6, 6, -5, 5, -4, 4, -3, 3, -2, 2, -1, 1, 0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 7],
+      "q8_scale_bits": 11272,
+      "q8_values": [-127, 127, -111, 111, -95, 95, -79, 79, -64, 64, -48, 48, -32, 32, -16, 16, 0, 8, -8, 24, -24, 40, -40, 56, -56, 71, -71, 87, -87, 103, -103, 119],
+      "q8_sum": 119
+    },
+    {
+      "name": "positive maximum wins tie",
+      "input": [8, -8, 7, -7, 6, -6, 5, -5, 4, -4, 3, -3, 2, -2, 1, -1, 0, -0.5, 0.5, -1.5, 1.5, -2.5, 2.5, -3.5, 3.5, -4.5, 4.5, -5.5, 5.5, -6.5, 6.5, -7.5],
+      "q4_scale_bits": 48128,
+      "q4_packed": [128, 159, 113, 175, 98, 190, 83, 205, 68, 220, 53, 235, 38, 250, 23, 249],
+      "q4_dequant": [8, -7, 7, -7, 6, -6, 5, -5, 4, -4, 3, -3, 2, -2, 1, -1, 0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6, 6, -7, 7, -7],
+      "q8_scale_bits": 11272,
+      "q8_values": [127, -127, 111, -111, 95, -95, 79, -79, 64, -64, 48, -48, 32, -32, 16, -16, 0, -8, 8, -24, 24, -40, 40, -56, 56, -71, 71, -87, 87, -103, 103, -119],
+      "q8_sum": -119
+    },
+    {
+      "name": "half scale",
+      "input": [-4.0, 4.0, -3.5, 3.5, -3.0, 3.0, -2.5, 2.5, -2.0, 2.0, -1.5, 1.5, -1.0, 1.0, -0.5, 0.5, 0.0, 0.25, -0.25, 0.75, -0.75, 1.25, -1.25, 1.75, -1.75, 2.25, -2.25, 2.75, -2.75, 3.25, -3.25, 3.75],
+      "q4_scale_bits": 14336,
+      "q4_packed": [128, 159, 113, 175, 98, 190, 83, 205, 68, 220, 53, 235, 38, 250, 23, 249],
+      "q4_dequant": [-4.0, 3.5, -3.5, 3.5, -3.0, 3.0, -2.5, 2.5, -2.0, 2.0, -1.5, 1.5, -1.0, 1.0, -0.5, 0.5, 0.0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.0, -2.0, 2.5, -2.5, 3.0, -3.0, 3.5, -3.5, 3.5],
+      "q8_scale_bits": 10248,
+      "q8_values": [-127, 127, -111, 111, -95, 95, -79, 79, -64, 64, -48, 48, -32, 32, -16, 16, 0, 8, -8, 24, -24, 40, -40, 56, -56, 71, -71, 87, -87, 103, -103, 119],
+      "q8_sum": 119
+    }
+  ],
+  "matvec": {
+    "weight_blocks": [1, 3, 2, 0, 0, 1, 2, 1, 3, 2],
+    "activation_blocks": [1, 2],
+    "output": [352.04150390625, -704.0830078125, -704.0830078125, -1408.166015625, 1056.12451171875]
+  }
+}

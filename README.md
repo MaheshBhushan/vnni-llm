@@ -33,7 +33,7 @@ Needs a C++20 compiler, CMake ≥ 3.20, and a Linux x86-64 machine.
 git clone https://github.com/MaheshBhushan/vnni-llm.git
 cd vnni-llm
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
-ctest --test-dir build        # kernel + forward-pass tests
+ctest --test-dir build --output-on-failure --timeout 20
 ```
 
 Weights are not in the repo. Fetch Qwen2.5-3B-Instruct (~6 GB) into `models/`:
@@ -64,6 +64,47 @@ Then generate:
 
 > [!NOTE]
 > BF16 mode memory-maps ~6 GB of weights. On a 16 GB laptop, run with `-q`; quantized mode releases the mapping after conversion (`src/model.cpp:139`) specifically because the two working sets were thrashing each other.
+
+### Regression tests and installed CPU smoke
+
+CTest runs the kernel tests and the fixed C++ tokenizer/quantization references
+in [`tests/fixtures`](tests/fixtures/README.md). Python 3 enables the `cpu_smoke`
+test, which generates a tiny one-layer BF16 model with the standard library.
+These checks require no downloaded weights, network access, or Python packages.
+Release builds keep the reference checks active.
+
+Install the native executable into a local prefix and check that executable:
+
+```bash
+cmake --install build --prefix "$PWD/build/install"
+python3 tests/smoke_cpu.py --binary build/install/bin/mk-infer
+```
+
+The smoke scenario feeds the UTF-8 prompt `hé` through stdin with raw prompting,
+greedy sampling (`-t 0`), and three requested output tokens. It checks BF16 and
+Q4 inference with one and two threads, twice per configuration. Every run must
+return `text=AAA`, `prompt_tokens=3`, `output_tokens=3`, and
+`finish_reason=length`. Timing fields vary and do not enter reference comparisons.
+The script returns nonzero on a timeout, engine failure, or reference mismatch.
+This synthetic model verifies installation and basic inference wiring. It does
+not measure production-model quality or performance.
+
+The default build selects CPU instructions with `-march=native`. To exercise
+the scalar fallback on x86-64, build a separate directory with baseline flags:
+
+```bash
+cmake -S . -B build/scalar -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS_RELEASE="-O2 -g -march=x86-64"
+cmake --build build/scalar -j2
+ctest --test-dir build/scalar --output-on-failure --timeout 20
+```
+
+The HuggingFace forward comparison remains a separate optional check because it
+requires a model and reference dumps:
+
+```bash
+./build/test_forward /path/to/model /path/to/reference-dumps
+```
 
 ## Python MCP service
 
