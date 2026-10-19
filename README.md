@@ -65,6 +65,79 @@ Then generate:
 > [!NOTE]
 > BF16 mode memory-maps ~6 GB of weights. On a 16 GB laptop, run with `-q`; quantized mode releases the mapping after conversion (`src/model.cpp:139`) specifically because the two working sets were thrashing each other.
 
+## Python MCP service
+
+The stdio service exposes one `generate` tool through the [official MCP Python
+SDK](https://py.sdk.modelcontextprotocol.io/v1/server/). Build `mk-infer` and
+download a supported model as above, then install the Python service:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e .
+.venv/bin/vnni-mcp --binary build/mk-infer --model models/qwen2.5-3b-instruct --quantize --threads 4
+```
+
+Configure an MCP client with absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "vnni-llm": {
+      "command": "/absolute/path/vnni-llm/.venv/bin/vnni-mcp",
+      "args": ["--binary", "/absolute/path/vnni-llm/build/mk-infer",
+               "--model", "/absolute/path/vnni-llm/models/qwen2.5-3b-instruct",
+               "--quantize", "--threads", "4", "--timeout", "120"]
+    }
+  }
+}
+```
+
+Call `generate` with `{"prompt":"Explain attention.","max_tokens":128,
+"temperature":0,"raw":false}`. The service uses the existing Qwen chat template
+unless `raw` is true. It sends prompts over stdin and reserves stdout for MCP.
+Each call launches a fresh engine process and loads the configured model.
+
+| Bound | Value |
+|---|---|
+| Prompt | Nonempty, at most 16,384 UTF-8 bytes and 2,048 encoded tokens |
+| Output | 1–1,024 requested tokens; default 128 |
+| Context | Prompt plus requested output must fit `min(4096, max_position_embeddings)` |
+| Sampling | Temperature 0–2; default greedy; fixed seed 42 and top-p 0.8 |
+| Execution | One active call; concurrent calls return a busy error |
+| Time | Default 120 seconds including startup/loading; `--timeout` accepts up to 300 |
+
+Timeouts and client cancellation kill and reap the engine. Invalid requests,
+engine failures, and timeouts produce MCP tool errors without success metrics.
+
+Successful calls return structured JSON with generated `text`, `finish_reason`
+(`stop` or `length`), exact `prompt_tokens` and `output_tokens`, `generation_ms`,
+and `latency_ms`. Prompt tokens include the chat template and special tokens.
+Output tokens count emitted tokens and exclude the terminating EOS token.
+`generation_ms` measures native prefill and decoding. `latency_ms` measures the
+Python subprocess round trip, including weight loading, using a monotonic clock.
+The engine replaces incomplete UTF-8 output fragments with replacement characters.
+Counts describe generated token IDs before that replacement.
+
+Results also record the prompt SHA-256, engine binary SHA-256, model directory,
+token limit, temperature, seed, template mode, thread count, and quantization mode.
+Comparison harnesses can persist each structured result as a JSONL record. Keep
+model files immutable during a run and record their revision or checksums alongside
+results. Keep the engine binary immutable too. The directory path does not identify model content. Record CPU/hardware
+and distinguish cold model-loading latency from native generation time when
+comparing runs. The service provides no production-model benchmark claims.
+
+The native structured interface is also available directly:
+
+```bash
+printf '%s' 'Explain attention.' | ./build/mk-infer generate -m models/qwen2.5-3b-instruct -q --json --prompt-stdin -n 128
+.venv/bin/python -m unittest discover -s tests -p test_mcp.py -v
+```
+
+The Python tests generate a tiny one-layer model in a temporary directory and
+exercise real BF16/Q4 inference, MCP initialization/tool schemas/results, token
+bounds, error propagation, timeout cleanup, and cancellation. They require a
+built engine and the installed Python dependencies. They do not download weights.
+
 ## How it works
 
 One token's round trip:

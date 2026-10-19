@@ -14,3 +14,4 @@ bench/wiki.test.raw
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/

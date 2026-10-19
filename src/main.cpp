@@ -11,6 +11,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 using namespace mk;
 
@@ -19,11 +20,11 @@ static void usage() {
         "usage:\n"
         "  mk-infer dump     -m <model_dir>\n"
         "  mk-infer tokenize -m <model_dir> -p <text>\n"
-        "  mk-infer generate -m <model_dir> -p <prompt> [-n max_tokens] [-t temp] [--raw]\n");
+        "  mk-infer generate -m <model_dir> -p <prompt> [-n max_tokens] [-t temp] [--raw] [--json] [--prompt-stdin]\n");
     std::exit(1);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv) try {
     if (argc < 2) usage();
     std::string mode = argv[1];
     std::string model_dir, prompt;
@@ -32,6 +33,7 @@ int main(int argc, char** argv) {
     bool raw = false;
     bool quantize = false;
     int threads = 1;
+    bool json_output = false, prompt_stdin = false;
 
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
@@ -42,9 +44,14 @@ int main(int argc, char** argv) {
         else if (a == "-j" && i + 1 < argc) threads = std::atoi(argv[++i]);
         else if (a == "-q") quantize = true;
         else if (a == "--raw") raw = true;
+        else if (a == "--json") json_output = true;
+        else if (a == "--prompt-stdin") prompt_stdin = true;
         else usage();
     }
     if (model_dir.empty()) usage();
+    if ((json_output || prompt_stdin) && mode != "generate") usage();
+    if (prompt_stdin)
+        prompt.assign(std::istreambuf_iterator<char>(std::cin), std::istreambuf_iterator<char>());
 
     if (mode == "dump") {
         SafetensorsFile st(model_dir);
@@ -164,17 +171,25 @@ int main(int argc, char** argv) {
     }
 
     if (mode == "generate") {
+        if (max_tokens < 1 || threads < 1 || !std::isfinite(temperature) || temperature < 0.f)
+            throw std::runtime_error("generation requires positive tokens/threads and finite nonnegative temperature");
+        if (json_output && (max_tokens > 1024 || prompt.size() > 16384))
+            throw std::runtime_error("JSON generation permits at most 1024 output tokens and 16384 prompt bytes");
         Tokenizer tok(model_dir + "/tokenizer.json");
-        Model model(model_dir, quantize, threads);
-        const auto& cfg = model.config();
 
         std::string text = raw ? prompt
             : "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
               "<|im_start|>user\n" + prompt + "<|im_end|>\n<|im_start|>assistant\n";
         std::vector<int> ids = tok.encode_with_specials(text);
+        const auto cfg = ModelConfig::from_json_file(model_dir + "/config.json");
+        const int context_limit = std::min(4096, cfg.max_position_embeddings);
+        if (ids.empty() || (json_output && ids.size() > 2048) ||
+            ids.size() + static_cast<size_t>(max_tokens) > static_cast<size_t>(context_limit))
+            throw std::runtime_error("prompt/output exceed generation context or prompt token limit (2048 in JSON mode)");
+        Model model(model_dir, quantize, threads);
         std::fprintf(stderr, "[prompt: %zu tokens]\n", ids.size());
 
-        KVCache kv(cfg.n_layers, cfg.n_kv_heads, cfg.head_dim, 4096);
+        KVCache kv(cfg.n_layers, cfg.n_kv_heads, cfg.head_dim, context_limit);
         std::vector<float> logits(cfg.vocab_size);
         Sampler sampler({temperature, 0.8f, 42});
 
@@ -185,17 +200,34 @@ int main(int argc, char** argv) {
 
         int token = ids.back();
         int produced = 0;
+        std::string output, finish_reason = "length";
         for (; produced < max_tokens; ++produced) {
             model.forward(token, kv, logits.data());
             token = sampler.sample(logits.data(), cfg.vocab_size);
-            if (token == cfg.eos_token_id || token == tok.special_id("<|im_end|>")) break;
-            std::fputs(tok.decode_one(token).c_str(), stdout);
-            std::fflush(stdout);
+            if (token == cfg.eos_token_id || token == tok.special_id("<|im_end|>")) {
+                finish_reason = "stop";
+                break;
+            }
+            auto piece = tok.decode_one(token);
+            if (json_output) output += piece;
+            else {
+                std::fputs(piece.c_str(), stdout);
+                std::fflush(stdout);
+            }
         }
         auto t2 = std::chrono::steady_clock::now();
 
         double prefill_s = std::chrono::duration<double>(t1 - t0).count();
         double decode_s = std::chrono::duration<double>(t2 - t1).count();
+        if (json_output) {
+            nlohmann::json result = {
+                {"text", output}, {"prompt_tokens", ids.size()}, {"output_tokens", produced},
+                {"finish_reason", finish_reason}, {"generation_ms", (prefill_s + decode_s) * 1000.0}
+            };
+            // A final token may end inside a UTF-8 sequence; JSON must remain valid.
+            std::cout << result.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
+            return 0;
+        }
         std::fprintf(stderr, "\n[prefill: %.2f tok/s | decode: %.2f tok/s]\n",
                      (ids.size() - 1) / prefill_s, (produced + 1) / decode_s);
         return 0;
@@ -250,4 +282,7 @@ int main(int argc, char** argv) {
     }
 
     usage();
+} catch (const std::exception& e) {
+    std::fprintf(stderr, "mk-infer: %s\n", e.what());
+    return 1;
 }
