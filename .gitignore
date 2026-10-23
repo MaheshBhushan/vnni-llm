@@ -14,3 +14,8 @@ bench/wiki.test.raw
 .venv/
 __pycache__/
 *.pyc
+
+# Local secrets
+.env
+.env.*
+!.env.example
